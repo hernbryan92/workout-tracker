@@ -1,11 +1,12 @@
 from flask import Blueprint, render_template, request, redirect, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, logout_user, login_required
-from .models import db, User   
+from .models import User   
+from . import db
 
 auth = Blueprint('auth', __name__)
 
-@auth.route('/login', methods=['GET', 'POST'])
+@auth.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -14,9 +15,9 @@ def register():
 
         if not username or not email or not password:
             return "All fields are required.", 400
-
+        
         if User.query.filter((User.username == username) | (User.email == email)).first():
-            return "Username or email already exists.", 400
+            return redirect(url_for('auth.login'))
 
         user = User(
             username=username,
@@ -25,6 +26,7 @@ def register():
         )
         db.session.add(user)
         db.session.commit()
+
         login_user(user)
         return redirect(url_for('main.home'))
 

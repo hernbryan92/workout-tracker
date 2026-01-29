@@ -1,6 +1,8 @@
 from flask import Blueprint, render_template, request, redirect, url_for
 from flask_login import login_required, current_user
 from .models import db, Workout
+from sqlalchemy import func
+from datetime import datetime, timedelta
 
 main = Blueprint('main', __name__)
 
@@ -45,3 +47,56 @@ def delete_workout(workout_id):
         db.session.commit()
     return redirect(url_for('main.home'))
 
+@main.route("/stats")
+@login_required
+def stats():
+    total_workouts = Workout.query.filter_by(user_id=current_user.id).count()
+
+    unique_exercises = (
+        db.session.query(func.count(func.distinct(Workout.exercise)))
+        .filter(Workout.user_id == current_user.id)
+        .scalar()
+    )
+
+    most_common = (
+        db.session.query(Workout.exercise, func.count(Workout.id))
+        .filter(Workout.user_id == current_user.id)
+        .group_by(Workout.exercise)
+        .order_by(func.count(Workout.id).desc())
+        .first()
+    )
+    most_common_exercise = most_common[0] if most_common else None
+    most_common_count = most_common[1] if most_common else 0
+
+    # PRs max weight per exercise
+
+    prs = (
+        db.session.query(
+            Workout.exercise, 
+            func.max(Workout.weight).label("max_weight")
+    )
+        .filter(Workout.user_id == current_user.id)
+        .group_by(Workout.exercise)
+        .order_by(func.max(Workout.weight).desc())
+        .all()
+    )
+
+    # Workouts in last 7 days
+    cutoff = datetime.utcnow() - timedelta(days=7)
+    last_7_days = (
+        Workout.query.filter(
+            Workout.user_id == current_user.id,
+            Workout.created_at >= cutoff
+        ).count()
+    )
+
+    return render_template(
+        'stats.html',
+        total_workouts=total_workouts,
+        unique_exercises=unique_exercises,
+        most_common_exercise=most_common_exercise,
+        most_common_count=most_common_count,
+        prs=prs,
+        last_7_days=last_7_days,
+        username=current_user.username
+    )
